@@ -93,8 +93,17 @@ start.addEventListener('click',begin);
 const draco=new DRACOLoader();
 draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
 const loader=new GLTFLoader();loader.setDRACOLoader(draco);
-status.textContent='OceanAR 準備就緒｜正在載入海龜';
-loader.load('./turtle.glb',gltf=>{
+const modelURL='https://hks200011.github.io/OceanAR/turtle.glb';
+status.textContent='正在檢查海龜檔案…';
+async function loadTurtle(){
+ try{
+  const response=await fetch(modelURL+'?v=3',{cache:'no-store'});
+  if(!response.ok)throw Error('模型網址 HTTP '+response.status+'，請確認 GitHub 上有 turtle.glb');
+  const bytes=await response.arrayBuffer();
+  const signature=new TextDecoder().decode(bytes.slice(0,4));
+  if(signature!=='glTF')throw Error('下載的不是有效 GLB，檔案開頭：'+signature);
+  status.textContent='已下載海龜 '+(bytes.byteLength/1048576).toFixed(1)+' MB，正在解碼…';
+  loader.parse(bytes,modelURL.substring(0,modelURL.lastIndexOf('/')+1),gltf=>{
  const turtle=gltf.scene;
  // Normalize the model size and center so it stays visible regardless of authoring units.
  turtle.updateMatrixWorld(true);
@@ -113,12 +122,12 @@ loader.load('./turtle.glb',gltf=>{
   const clip=gltf.animations.reduce((best,clip)=>clip.tracks.length>best.tracks.length?clip:best,gltf.animations[0]);
   mixer.clipAction(clip).play();
  }
- status.textContent='海龜已載入｜點擊啟動 OceanAR';
+ status.textContent='海龜載入成功（'+gltf.animations.length+' 段動畫）｜請啟動 OceanAR';
  draco.dispose();
-},undefined,error=>{
- console.error('海龜載入失敗',error);
- status.textContent='海龜載入失敗：'+(error?.message||String(error));
-});
+},error=>{console.error('海龜解析失敗',error);status.textContent='海龜解碼失敗：'+(error?.message||String(error));});
+ }catch(error){console.error(error);status.textContent='海龜下載失敗：'+error.message;}
+}
+loadTurtle();
 function animate(){requestAnimationFrame(animate);const delta=clock.getDelta();if(mixer)mixer.update(delta);if(active&&hasOrientation)camera.quaternion.copy(latestQ);renderer.render(scene,camera)}animate();
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 </script>
