@@ -30,6 +30,7 @@ button{border:0;border-radius:14px;padding:15px 20px;background:#00a9ee;color:wh
 <script type="module">
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
 const video=document.getElementById('camera'),status=document.getElementById('panel');
 const start=document.getElementById('start'),reset=document.getElementById('reset');
 const oceanFilter=document.getElementById('ocean-filter');
@@ -89,11 +90,35 @@ async function begin(){
  }catch(err){status.textContent='啟動失敗：'+err.message;start.disabled=false;}
 }
 start.addEventListener('click',begin);
-new GLTFLoader().load('./turtle.glb',gltf=>{
- anchor.remove(ball);
- const turtle=gltf.scene;turtle.scale.setScalar(.7);anchor.add(turtle);
- if(gltf.animations.length){mixer=new THREE.AnimationMixer(turtle);mixer.clipAction(gltf.animations[0]).play();}
-},undefined,()=>{ /* turtle.glb optional; keep green sphere */ });
+const draco=new DRACOLoader();
+draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
+const loader=new GLTFLoader();loader.setDRACOLoader(draco);
+status.textContent='OceanAR 準備就緒｜正在載入海龜';
+loader.load('./turtle.glb',gltf=>{
+ const turtle=gltf.scene;
+ // Normalize the model size and center so it stays visible regardless of authoring units.
+ turtle.updateMatrixWorld(true);
+ const bounds=new THREE.Box3().setFromObject(turtle);
+ const size=bounds.getSize(new THREE.Vector3());
+ const maxDimension=Math.max(size.x,size.y,size.z);
+ if(!Number.isFinite(maxDimension)||maxDimension<=0){status.textContent='海龜模型尺寸異常';return;}
+ turtle.scale.setScalar(1.1/maxDimension);
+ turtle.updateMatrixWorld(true);
+ const centered=new THREE.Box3().setFromObject(turtle);
+ const center=centered.getCenter(new THREE.Vector3());
+ turtle.position.sub(center);
+ anchor.add(turtle);anchor.remove(ball);
+ if(gltf.animations.length){
+  mixer=new THREE.AnimationMixer(turtle);
+  const clip=gltf.animations.reduce((best,clip)=>clip.tracks.length>best.tracks.length?clip:best,gltf.animations[0]);
+  mixer.clipAction(clip).play();
+ }
+ status.textContent='海龜已載入｜點擊啟動 OceanAR';
+ draco.dispose();
+},undefined,error=>{
+ console.error('海龜載入失敗',error);
+ status.textContent='海龜載入失敗：'+(error?.message||String(error));
+});
 function animate(){requestAnimationFrame(animate);const delta=clock.getDelta();if(mixer)mixer.update(delta);if(active&&hasOrientation)camera.quaternion.copy(latestQ);renderer.render(scene,camera)}animate();
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 </script>
