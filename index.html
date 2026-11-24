@@ -112,7 +112,7 @@ function recenter(){
  if(!trackingGranted){status.textContent='尚未取得方向權限；點「重新定位」可嘗試授權';return;}
  if(!hasOrientation){status.textContent='等待方向感測器資料，請輕輕轉動手機';return;}
  camera.quaternion.copy(latestQ);
- latestSpawnQ.copy(latestQ);basePosition.set(0,0,0).add(new THREE.Vector3(0,0,-5).applyQuaternion(latestQ));anchor.position.copy(basePosition);swimTime=0;
+ latestSpawnQ.copy(latestQ);basePosition.set(0,0,0).add(new THREE.Vector3(-0.057823, -0.98064, -4.0781).applyQuaternion(latestQ));anchor.position.copy(basePosition);swimTime=0;
  // anchor keeps world position while the camera rotates
  orientationReady=true;status.textContent='OceanAR 已啟動｜左右轉動手機測試';
 }
