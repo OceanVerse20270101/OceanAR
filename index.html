@@ -1,292 +1,82 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-  }
-}
-</script>
+<!doctype html>
+<html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport"
-content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <title>OceanAR</title>
-
 <style>
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    overflow: hidden;
-    background: black;
-    font-family: Arial, sans-serif;
-}
-
-#camera {
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-#arCanvas {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}
-
-#start {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    padding: 18px 30px;
-    background: #00aaff;
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 20px;
-    z-index: 10;
-}
-
-#status {
-    position: fixed;
-    top: 20px;
-    left: 10px;
-    right: 10px;
-    color: white;
-    text-align: center;
-    z-index: 5;
-    text-shadow: 0 1px 4px black;
-}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07131c;font-family:system-ui,sans-serif}
+#camera,#scene{position:fixed;inset:0;width:100%;height:100%}
+#camera{object-fit:cover}#scene{pointer-events:none}
+#panel{position:fixed;z-index:5;left:12px;right:12px;top:max(18px,env(safe-area-inset-top));color:white;text-align:center;text-shadow:0 1px 5px #000;font-size:15px}
+#controls{position:fixed;z-index:6;left:0;right:0;bottom:max(36px,env(safe-area-inset-bottom));display:flex;justify-content:center;gap:10px}
+button{border:0;border-radius:14px;padding:15px 20px;background:#00a9ee;color:white;font-weight:700;font-size:17px}button:disabled{opacity:.5}#reset{display:none;background:#164e72}
 </style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
-
 <body>
-
-<video id="camera" autoplay playsinline muted></video>
-
-<div id="status">OceanAR 準備中</div>
-
-<button id="start">啟動 OceanAR</button>
-
+<video id="camera" autoplay muted playsinline></video>
+<div id="panel">OceanAR 準備就緒，請點選啟動</div>
+<div id="controls"><button id="start">啟動 OceanAR</button><button id="reset">重新定位</button></div>
 <script type="module">
-
-import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-
-const scene = new THREE.Scene();
-
-const camera3D = new THREE.PerspectiveCamera(
-    65,
-    window.innerWidth / window.innerHeight,
-    0.01,
-    100
-);
-
-const renderer = new THREE.WebGLRenderer({
-    alpha: true,
-    antialias: true
-});
-
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-renderer.domElement.id = "arCanvas";
-document.body.appendChild(renderer.domElement);
-
-scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2));
-
-const light = new THREE.DirectionalLight(0xffffff, 2);
-light.position.set(2, 5, 3);
-scene.add(light);
-
-// 測試物件：綠色球
-const geometry = new THREE.SphereGeometry(0.35, 32, 32);
-const material = new THREE.MeshStandardMaterial({
-    color: 0x00dd88
-});
-
-const testObject = new THREE.Mesh(geometry, material);
-scene.add(testObject);
-
-const mixerClock = new THREE.Clock();
-let mixer = null;
-let modelLoaded = false;
-
-// 載入海龜模型
-const loader = new GLTFLoader();
-
-loader.load(
-    "./turtle.glb",
-    (gltf) => {
-        scene.remove(testObject);
-
-        const turtle = gltf.scene;
-        turtle.scale.setScalar(0.7);
-        scene.add(turtle);
-
-        if (gltf.animations.length > 0) {
-            mixer = new THREE.AnimationMixer(turtle);
-            mixer.clipAction(gltf.animations[0]).play();
-        }
-
-        modelLoaded = true;
-    },
-    undefined,
-    () => {
-        console.log("沒有海龜模型，使用測試球");
-    }
-);
-
-// 手機方向
-let initialOrientation = null;
-let latestOrientation = null;
-let started = false;
-
-// 將手機方向轉換為 Three.js 相機旋轉
-function orientationQuaternion(alpha, beta, gamma) {
-    const euler = new THREE.Euler(
-        THREE.MathUtils.degToRad(beta),
-        THREE.MathUtils.degToRad(alpha),
-        -THREE.MathUtils.degToRad(gamma),
-        "YXZ"
-    );
-
-    const q = new THREE.Quaternion();
-    q.setFromEuler(euler);
-
-    const correction = new THREE.Quaternion(
-        -Math.sqrt(0.5),
-        0,
-        0,
-        Math.sqrt(0.5)
-    );
-
-    q.multiply(correction);
-
-    const angle = THREE.MathUtils.degToRad(
-        screen.orientation?.angle || 0
-    );
-
-    const screenRotation = new THREE.Quaternion();
-    screenRotation.setFromAxisAngle(
-        new THREE.Vector3(0, 0, 1),
-        -angle
-    );
-
-    q.multiply(screenRotation);
-    return q;
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+const video=document.getElementById('camera'),status=document.getElementById('panel');
+const start=document.getElementById('start'),reset=document.getElementById('reset');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.01,100);
+const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.domElement.id='scene';document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x526a78,2.2));
+const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);scene.add(light);
+const anchor=new THREE.Group();scene.add(anchor);
+const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));anchor.add(ball);
+let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion();
+const clock=new THREE.Clock();
+const zee=new THREE.Vector3(0,0,1),screenQ=new THREE.Quaternion(),deviceQ=new THREE.Quaternion();
+const correction=new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5));
+const euler=new THREE.Euler(0,0,0,'YXZ');
+function readOrientation(event){
+ if(event.alpha==null||event.beta==null||event.gamma==null)return;
+ euler.set(THREE.MathUtils.degToRad(event.beta),THREE.MathUtils.degToRad(event.alpha),-THREE.MathUtils.degToRad(event.gamma),'YXZ');
+ deviceQ.setFromEuler(euler);deviceQ.multiply(correction);
+ const angle=screen.orientation?.angle??window.orientation??0;
+ screenQ.setFromAxisAngle(zee,-THREE.MathUtils.degToRad(Number(angle)));
+ latestQ.copy(deviceQ).multiply(screenQ);hasOrientation=true;
+ if(active&&!orientationReady)recenter();
 }
-
-window.addEventListener("deviceorientation", (event) => {
-    if (
-        event.alpha === null ||
-        event.beta === null ||
-        event.gamma === null
-    ) return;
-
-    latestOrientation = orientationQuaternion(
-        event.alpha,
-        event.beta,
-        event.gamma
-    );
-
-    if (started && initialOrientation === null) {
-        initialOrientation = latestOrientation.clone();
-
-        // 讓物件出生在目前手機朝向的前方
-        const forward = new THREE.Vector3(0, 0, -1);
-        forward.applyQuaternion(initialOrientation);
-
-        const spawn = forward.multiplyScalar(2);
-        testObject.position.copy(spawn);
-
-        // 若已載入海龜，也同步定位
-        if (modelLoaded) {
-            const turtle = scene.children.find(
-                child => child.type === "Group"
-            );
-            if (turtle) turtle.position.copy(spawn);
-        }
-    }
-});
-
-async function startAR() {
-    const status = document.getElementById("status");
-
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: { ideal: "environment" }
-            },
-            audio: false
-        });
-
-        document.getElementById("camera").srcObject = stream;
-
-        if (
-            typeof DeviceOrientationEvent !== "undefined" &&
-            typeof DeviceOrientationEvent.requestPermission === "function"
-        ) {
-            const permission =
-                await DeviceOrientationEvent.requestPermission();
-
-            if (permission !== "granted") {
-                throw new Error("方向感測器未授權");
-            }
-        }
-
-        started = true;
-        document.getElementById("start").style.display = "none";
-        status.textContent = "OceanAR 已啟動";
-
-    } catch (error) {
-        status.textContent = "啟動失敗：" + error.message;
-    }
+window.addEventListener('deviceorientation',readOrientation,true);
+function recenter(){
+ if(!hasOrientation){status.textContent='等待方向感測器資料，請輕輕轉動手機';return;}
+ camera.quaternion.copy(latestQ);
+ anchor.position.set(0,0,0).add(new THREE.Vector3(0,0,-2).applyQuaternion(latestQ));
+ // anchor keeps world position while the camera rotates
+ orientationReady=true;status.textContent='OceanAR 已啟動｜左右轉動手機測試';
 }
-
-document.getElementById("start").addEventListener(
-    "click",
-    startAR
-);
-
-function animate() {
-    requestAnimationFrame(animate);
-
-    const delta = mixerClock.getDelta();
-
-    if (mixer) mixer.update(delta);
-
-    if (latestOrientation && initialOrientation) {
-        camera3D.quaternion.copy(latestOrientation);
-    }
-
-    renderer.render(scene, camera3D);
+reset.addEventListener('click',recenter);
+async function begin(){
+ start.disabled=true;
+ try{
+  // On iOS the permission request must happen directly in the click gesture, before any await.
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+   const granted=await DeviceOrientationEvent.requestPermission();
+   if(granted!=='granted')throw Error('方向感測器未授權');
+  }
+  status.textContent='正在開啟相機…';
+  const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});
+  video.srcObject=stream;await video.play();
+  active=true;start.style.display='none';reset.style.display='inline-block';
+  recenter();
+ }catch(err){status.textContent='啟動失敗：'+err.message;start.disabled=false;}
 }
-
-animate();
-
-window.addEventListener("resize", () => {
-    camera3D.aspect =
-        window.innerWidth / window.innerHeight;
-
-    camera3D.updateProjectionMatrix();
-
-    renderer.setSize(
-        window.innerWidth,
-        window.innerHeight
-    );
-});
-
+start.addEventListener('click',begin);
+new GLTFLoader().load('./turtle.glb',gltf=>{
+ anchor.remove(ball);
+ const turtle=gltf.scene;turtle.scale.setScalar(.7);anchor.add(turtle);
+ if(gltf.animations.length){mixer=new THREE.AnimationMixer(turtle);mixer.clipAction(gltf.animations[0]).play();}
+},undefined,()=>{ /* turtle.glb optional; keep green sphere */ });
+function animate(){requestAnimationFrame(animate);const delta=clock.getDelta();if(mixer)mixer.update(delta);if(active&&hasOrientation)camera.quaternion.copy(latestQ);renderer.render(scene,camera)}animate();
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 </script>
 </body>
 </html>
