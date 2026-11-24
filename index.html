@@ -7,7 +7,15 @@
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07131c;font-family:system-ui,sans-serif}
 #camera,#scene{position:fixed;inset:0;width:100%;height:100%}
-#camera{object-fit:cover}#scene{pointer-events:none}
+#camera{object-fit:cover}
+#ocean-filter{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden;display:none;background:linear-gradient(180deg,rgba(0,100,155,.24),rgba(0,150,180,.13) 55%,rgba(0,70,145,.29));mix-blend-mode:screen}
+#ocean-filter::before{content:"";position:absolute;inset:-35%;background:repeating-linear-gradient(112deg,transparent 0 55px,rgba(160,245,255,.10) 70px,transparent 110px);transform-origin:center top;animation:rays 9s ease-in-out infinite alternate}
+#ocean-filter::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 45% 5%,rgba(160,240,255,.20),transparent 65%);animation:glow 6s ease-in-out infinite alternate}
+.bubble{position:absolute;bottom:-12vh;left:var(--x);width:var(--s);height:var(--s);border:1.5px solid rgba(210,255,255,.55);border-radius:50%;box-shadow:inset -2px -2px 5px rgba(185,245,255,.2),0 0 8px rgba(190,255,255,.15);animation:float-up var(--d) linear infinite;animation-delay:var(--delay)}
+@keyframes float-up{from{transform:translate3d(0,0,0);opacity:0}10%{opacity:.65}85%{opacity:.6}to{transform:translate3d(var(--drift),-125vh,0);opacity:0}}
+@keyframes rays{from{transform:translateX(-10%) rotate(-7deg)}to{transform:translateX(12%) rotate(7deg)}}
+@keyframes glow{from{opacity:.4}to{opacity:1}}
+#scene{pointer-events:none;z-index:2}
 #panel{position:fixed;z-index:5;left:12px;right:12px;top:max(18px,env(safe-area-inset-top));color:white;text-align:center;text-shadow:0 1px 5px #000;font-size:15px}
 #controls{position:fixed;z-index:6;left:0;right:0;bottom:max(36px,env(safe-area-inset-bottom));display:flex;justify-content:center;gap:10px}
 button{border:0;border-radius:14px;padding:15px 20px;background:#00a9ee;color:white;font-weight:700;font-size:17px}button:disabled{opacity:.5}#reset{display:none;background:#164e72}
@@ -16,6 +24,7 @@ button{border:0;border-radius:14px;padding:15px 20px;background:#00a9ee;color:wh
 </head>
 <body>
 <video id="camera" autoplay muted playsinline></video>
+<div id="ocean-filter" aria-hidden="true"></div>
 <div id="panel">OceanAR 準備就緒，請點選啟動</div>
 <div id="controls"><button id="start">啟動 OceanAR</button><button id="reset">重新定位</button></div>
 <script type="module">
@@ -23,6 +32,16 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const video=document.getElementById('camera'),status=document.getElementById('panel');
 const start=document.getElementById('start'),reset=document.getElementById('reset');
+const oceanFilter=document.getElementById('ocean-filter');
+for(let i=0;i<28;i++){
+ const bubble=document.createElement('span');bubble.className='bubble';
+ bubble.style.setProperty('--x',`${(i*37+11)%100}%`);
+ bubble.style.setProperty('--s',`${5+(i*7)%18}px`);
+ bubble.style.setProperty('--d',`${6+(i*13)%10}s`);
+ bubble.style.setProperty('--delay',`${-(i*1.37)%15}s`);
+ bubble.style.setProperty('--drift',`${(i%2?1:-1)*(12+(i*9)%65)}px`);
+ oceanFilter.appendChild(bubble);
+}
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.01,100);
 const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
@@ -65,7 +84,7 @@ async function begin(){
   status.textContent='正在開啟相機…';
   const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});
   video.srcObject=stream;await video.play();
-  active=true;start.style.display='none';reset.style.display='inline-block';
+  active=true;oceanFilter.style.display='block';start.style.display='none';reset.style.display='inline-block';
   recenter();
  }catch(err){status.textContent='啟動失敗：'+err.message;start.disabled=false;}
 }
