@@ -87,7 +87,7 @@ for(let i=0;i<28;i++){
  oceanFilter.appendChild(bubble);
 }
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.01,100);
+const camera=new THREE.PerspectiveCamera(96.7,innerWidth/innerHeight,.01,100);
 const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.domElement.id='scene';document.body.appendChild(renderer.domElement);
 scene.add(new THREE.HemisphereLight(0xffffff,0x526a78,2.2));
@@ -95,7 +95,8 @@ const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);sce
 const anchor=new THREE.Group();anchor.position.set(-0.057823,-0.98064,-4.0781);scene.add(anchor);
 const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));anchor.add(ball);
 let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
-const basePosition=new THREE.Vector3(),latestSpawnQ=new THREE.Quaternion();let swimTime=0;
+const basePosition=new THREE.Vector3(-0.057823,-0.98064,-4.0781),latestSpawnQ=new THREE.Quaternion();let swimTime=0;
+const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 const clock=new THREE.Clock();
 const zee=new THREE.Vector3(0,0,1),screenQ=new THREE.Quaternion(),deviceQ=new THREE.Quaternion();
 const correction=new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5));
@@ -113,10 +114,11 @@ window.addEventListener('deviceorientation',readOrientation,true);
 function recenter(){
  if(!trackingGranted){status.textContent='尚未取得方向權限；點「重新定位」可嘗試授權';return;}
  if(!hasOrientation){status.textContent='等待方向感測器資料，請輕輕轉動手機';return;}
- camera.quaternion.copy(latestQ);
- latestSpawnQ.copy(latestQ);basePosition.set(0,0,0).add(new THREE.Vector3(-0.057823,-0.98064,-4.0781).applyQuaternion(latestQ));anchor.position.copy(basePosition);swimTime=0;
+ originQ.copy(latestQ);inverseOriginQ.copy(originQ).invert();
+ camera.quaternion.identity();
+ anchor.position.copy(basePosition);swimTime=0;
  // anchor keeps world position while the camera rotates
- orientationReady=true;status.textContent='OceanAR 已啟動｜左右轉動手機測試';
+ orientationReady=true;status.textContent='方向追蹤已校準｜轉動手機測試海龜是否留在原方位';
 }
 // iOS needs a user gesture for the first motion permission. Reuse the existing
 // recenter control rather than adding a separate tracking / PLAY button.
@@ -143,10 +145,10 @@ async function startCameraAutomatically(){
   }else if(typeof DeviceOrientationEvent.requestPermission==='function'){
    // Safari cannot silently request first-time motion permission.
    // Keep the UI free of a PLAY / tracking button; existing recenter handles consent.
-   status.textContent='相機已啟動｜如海龜未隨轉向變化，點「重新定位」授權';
+   status.textContent='相機已啟動｜請按「重新定位」授權方向感測器，否則海龜會跟著畫面';
   }else{
    trackingGranted=true;
-   if(hasOrientation)recenter();else status.textContent='相機已啟動｜等待方向感測器資料';
+   if(hasOrientation)recenter();else status.textContent='相機已啟動｜等待方向感測器資料，若未啟動請按重新定位';
   }
  }catch(err){
   status.textContent='相機無法自動啟動：'+err.message+'｜請確認 Safari 相機權限';
@@ -199,13 +201,16 @@ function animate(){
  requestAnimationFrame(animate);
  const delta=Math.min(clock.getDelta(),.05);
  if(mixer)mixer.update(delta);
- if(active&&trackingGranted&&hasOrientation)camera.quaternion.copy(latestQ);
+ if(active&&trackingGranted&&hasOrientation&&orientationReady){
+  relativeQ.copy(inverseOriginQ).multiply(latestQ);
+  camera.quaternion.copy(relativeQ);
+ }
  if(active&&orientationReady&&modelReady){
   swimTime+=delta;
   // A small closed swim path around the original world anchor, independent of camera rotation.
   const t=swimTime*.45;
   const localOffset=new THREE.Vector3(.42*Math.sin(t),.12*Math.sin(t*.7),.28*(Math.cos(t)-1));
-  localOffset.applyQuaternion(latestSpawnQ);
+  // Blender scene stays at the fixed anchor; motion never depends on phone heading.
   anchor.position.copy(basePosition).add(localOffset);
  }
  renderer.render(scene,camera);
