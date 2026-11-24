@@ -25,8 +25,8 @@ button{border:0;border-radius:14px;padding:15px 20px;background:#00a9ee;color:wh
 <body>
 <video id="camera" autoplay muted playsinline></video>
 <div id="ocean-filter" aria-hidden="true"></div>
-<div id="panel">OceanAR 準備就緒，請點選啟動</div>
-<div id="controls"><button id="start">啟動 OceanAR</button><button id="reset">重新定位</button></div>
+<div id="panel">OceanAR 正在準備相機…</div>
+<div id="controls"><button id="start" style="display:none">啟用方向追蹤</button><button id="reset">重新定位</button></div>
 <script type="module">
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -51,7 +51,8 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x526a78,2.2));
 const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);scene.add(light);
 const anchor=new THREE.Group();scene.add(anchor);
 const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));anchor.add(ball);
-let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion();
+let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
+const basePosition=new THREE.Vector3(),latestSpawnQ=new THREE.Quaternion();let swimTime=0;
 const clock=new THREE.Clock();
 const zee=new THREE.Vector3(0,0,1),screenQ=new THREE.Quaternion(),deviceQ=new THREE.Quaternion();
 const correction=new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5));
@@ -63,33 +64,52 @@ function readOrientation(event){
  const angle=screen.orientation?.angle??window.orientation??0;
  screenQ.setFromAxisAngle(zee,-THREE.MathUtils.degToRad(Number(angle)));
  latestQ.copy(deviceQ).multiply(screenQ);hasOrientation=true;
- if(active&&!orientationReady)recenter();
+ if(active&&trackingGranted&&!orientationReady)recenter();
 }
 window.addEventListener('deviceorientation',readOrientation,true);
 function recenter(){
+ if(!trackingGranted){status.textContent='請先啟用方向追蹤';return;}
  if(!hasOrientation){status.textContent='等待方向感測器資料，請輕輕轉動手機';return;}
  camera.quaternion.copy(latestQ);
- anchor.position.set(0,0,0).add(new THREE.Vector3(0,0,-2).applyQuaternion(latestQ));
+ latestSpawnQ.copy(latestQ);basePosition.set(0,0,0).add(new THREE.Vector3(0,0,-2.8).applyQuaternion(latestQ));anchor.position.copy(basePosition);swimTime=0;
  // anchor keeps world position while the camera rotates
  orientationReady=true;status.textContent='OceanAR 已啟動｜左右轉動手機測試';
 }
 reset.addEventListener('click',recenter);
-async function begin(){
- start.disabled=true;
+async function requestTracking(){
  try{
-  // On iOS the permission request must happen directly in the click gesture, before any await.
-  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
-   const granted=await DeviceOrientationEvent.requestPermission();
-   if(granted!=='granted')throw Error('方向感測器未授權');
+  if(typeof DeviceOrientationEvent==='undefined')throw Error('此裝置沒有方向感測器');
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+   const result=await DeviceOrientationEvent.requestPermission();
+   if(result!=='granted')throw Error('未允許方向追蹤');
   }
-  status.textContent='正在開啟相機…';
+  trackingGranted=true;start.style.display='none';
+  if(active){if(hasOrientation)recenter();else status.textContent='相機已啟動｜請轉動手機等待方向資料';}
+ }catch(err){status.textContent='方向追蹤未啟用：'+err.message;start.style.display='inline-block';}
+}
+start.addEventListener('click',requestTracking);
+async function startCameraAutomatically(){
+ try{
+  status.textContent='正在請求相機權限…';
   const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});
   video.srcObject=stream;await video.play();
-  active=true;oceanFilter.style.display='block';start.style.display='none';reset.style.display='inline-block';
-  recenter();
- }catch(err){status.textContent='啟動失敗：'+err.message;start.disabled=false;}
+  active=true;oceanFilter.style.display='block';reset.style.display='inline-block';
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+   // iPhone requires a user gesture; do not attempt an automatic permission prompt.
+   start.style.display='inline-block';
+   status.textContent='相機已啟動｜點「啟用方向追蹤」後即可定位海龜';
+  }else{
+   trackingGranted=true;
+   if(hasOrientation)recenter();else status.textContent='相機已啟動｜等待方向感測器資料';
+  }
+ }catch(err){
+  status.textContent='相機無法自動啟動：'+err.message+'｜請確認 Safari 相機權限';
+  // A user gesture may be necessary in some browsers. Provide a retry control.
+  start.textContent='重試開啟相機';start.style.display='inline-block';
+  start.onclick=()=>{start.style.display='none';startCameraAutomatically();};
+ }
 }
-start.addEventListener('click',begin);
+startCameraAutomatically();
 const draco=new DRACOLoader();
 draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
 const loader=new GLTFLoader();loader.setDRACOLoader(draco);
@@ -111,7 +131,7 @@ async function loadTurtle(){
  const size=bounds.getSize(new THREE.Vector3());
  const maxDimension=Math.max(size.x,size.y,size.z);
  if(!Number.isFinite(maxDimension)||maxDimension<=0){status.textContent='海龜模型尺寸異常';return;}
- turtle.scale.setScalar(1.1/maxDimension);
+ turtle.scale.setScalar(0.55/maxDimension);
  turtle.updateMatrixWorld(true);
  const centered=new THREE.Box3().setFromObject(turtle);
  const center=centered.getCenter(new THREE.Vector3());
@@ -119,16 +139,30 @@ async function loadTurtle(){
  anchor.add(turtle);anchor.remove(ball);
  if(gltf.animations.length){
   mixer=new THREE.AnimationMixer(turtle);
-  const clip=gltf.animations.reduce((best,clip)=>clip.tracks.length>best.tracks.length?clip:best,gltf.animations[0]);
-  mixer.clipAction(clip).play();
+  // Play both exported clips: root translation and skeletal flipper motion.
+  for(const clip of gltf.animations){mixer.clipAction(clip).setLoop(THREE.LoopRepeat,Infinity).play();}
  }
- status.textContent='海龜載入成功（'+gltf.animations.length+' 段動畫）｜請啟動 OceanAR';
+ modelReady=true;status.textContent='海龜載入成功（'+gltf.animations.length+' 段動畫）｜'+(active?'正在游泳':'等待相機');
  draco.dispose();
 },error=>{console.error('海龜解析失敗',error);status.textContent='海龜解碼失敗：'+(error?.message||String(error));});
  }catch(error){console.error(error);status.textContent='海龜下載失敗：'+error.message;}
 }
 loadTurtle();
-function animate(){requestAnimationFrame(animate);const delta=clock.getDelta();if(mixer)mixer.update(delta);if(active&&hasOrientation)camera.quaternion.copy(latestQ);renderer.render(scene,camera)}animate();
+function animate(){
+ requestAnimationFrame(animate);
+ const delta=Math.min(clock.getDelta(),.05);
+ if(mixer)mixer.update(delta);
+ if(active&&trackingGranted&&hasOrientation)camera.quaternion.copy(latestQ);
+ if(active&&orientationReady&&modelReady){
+  swimTime+=delta;
+  // A small closed swim path around the original world anchor, independent of camera rotation.
+  const t=swimTime*.45;
+  const localOffset=new THREE.Vector3(.42*Math.sin(t),.12*Math.sin(t*.7),.28*(Math.cos(t)-1));
+  localOffset.applyQuaternion(latestSpawnQ);
+  anchor.position.copy(basePosition).add(localOffset);
+ }
+ renderer.render(scene,camera);
+}animate();
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 </script>
 </body>
