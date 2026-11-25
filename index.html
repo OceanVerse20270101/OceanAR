@@ -102,6 +102,8 @@ function scheduleAutoRecenter(){
 }
 const basePosition=new THREE.Vector3(-0.057823,-0.98064,-4.0781),latestSpawnQ=new THREE.Quaternion();let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
+let latestBeta=null,originBeta=null;
+const trackedEuler=new THREE.Euler(0,0,0,'YXZ');
 const clock=new THREE.Clock();
 const zee=new THREE.Vector3(0,0,1),screenQ=new THREE.Quaternion(),deviceQ=new THREE.Quaternion();
 const correction=new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5));
@@ -112,14 +114,14 @@ function readOrientation(event){
  deviceQ.setFromEuler(euler);deviceQ.multiply(correction);
  const angle=screen.orientation?.angle??window.orientation??0;
  screenQ.setFromAxisAngle(zee,-THREE.MathUtils.degToRad(Number(angle)));
- latestQ.copy(deviceQ).multiply(screenQ);hasOrientation=true;
+ latestQ.copy(deviceQ).multiply(screenQ);latestBeta=THREE.MathUtils.degToRad(event.beta);hasOrientation=true;
  scheduleAutoRecenter();
 }
 window.addEventListener('deviceorientation',readOrientation,true);
 function recenter(){
  if(!trackingGranted){status.textContent='尚未取得方向權限；點「重新定位」可嘗試授權';return;}
  if(!hasOrientation){status.textContent='等待方向感測器資料，請輕輕轉動手機';return;}
- originQ.copy(latestQ);inverseOriginQ.copy(originQ).invert();
+ originQ.copy(latestQ);inverseOriginQ.copy(originQ).invert();originBeta=latestBeta;
  camera.quaternion.identity();
  anchor.position.copy(basePosition);swimTime=0;
  // anchor keeps world position while the camera rotates
@@ -213,7 +215,15 @@ function animate(){
   // Apply the change in device orientation in world coordinates.
   // The previous inverseOriginQ * latestQ order mixed pitch and yaw axes.
   relativeQ.copy(latestQ).multiply(inverseOriginQ);
-  camera.quaternion.copy(relativeQ);
+  // Android: use the actual beta sensor delta for pitch rather than
+  // letting the relative quaternion mix pitch into heading/roll.
+  trackedEuler.setFromQuaternion(relativeQ,'YXZ');
+  if(originBeta!==null&&latestBeta!==null){
+   let pitch=latestBeta-originBeta;
+   pitch=Math.atan2(Math.sin(pitch),Math.cos(pitch));
+   trackedEuler.x=THREE.MathUtils.clamp(pitch,-Math.PI/2,Math.PI/2);
+  }
+  camera.quaternion.setFromEuler(trackedEuler);
  }
  if(active&&orientationReady&&modelReady){
   swimTime+=delta;
