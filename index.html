@@ -94,7 +94,7 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x526a78,2.2));
 const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);scene.add(light);
 const anchor=new THREE.Group();anchor.position.set(-0.057823,-0.98064,-4.0781);scene.add(anchor);
 const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));anchor.add(ball);
-let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=true,modelReady=false;
+let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
 const basePosition=new THREE.Vector3(-0.057823,-0.98064,-4.0781),latestSpawnQ=new THREE.Quaternion();let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 const clock=new THREE.Clock();
@@ -112,6 +112,7 @@ function readOrientation(event){
 }
 window.addEventListener('deviceorientation',readOrientation,true);
 function recenter(){
+ if(!trackingGranted){status.textContent='尚未取得方向權限；點「重新定位」可嘗試授權';return;}
  if(!hasOrientation){status.textContent='等待方向感測器資料，請輕輕轉動手機';return;}
  originQ.copy(latestQ);inverseOriginQ.copy(originQ).invert();
  camera.quaternion.identity();
@@ -119,8 +120,20 @@ function recenter(){
  // anchor keeps world position while the camera rotates
  orientationReady=true;status.textContent='方向追蹤已校準｜轉動手機測試海龜是否留在原方位';
 }
-// Recenter uses orientation events already available to the page; no new permission prompt.
-reset.addEventListener('click',()=>recenter());
+// iOS needs a user gesture for the first motion permission. Reuse the existing
+// recenter control rather than adding a separate tracking / PLAY button.
+reset.addEventListener('click',async()=>{
+ if(!trackingGranted && typeof DeviceOrientationEvent!=='undefined'){
+  try{
+   if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    const permission=await DeviceOrientationEvent.requestPermission();
+    if(permission!=='granted')throw new Error('方向感測器權限遭拒');
+   }
+   trackingGranted=true;
+  }catch(error){status.textContent='方向追蹤無法啟動：'+error.message;return;}
+ }
+ recenter();
+});
 async function startCameraAutomatically(){
  try{
   status.textContent='正在請求相機權限…';
@@ -129,10 +142,13 @@ async function startCameraAutomatically(){
   active=true;oceanFilter.style.display='block';sunlight.style.display='block';reset.style.display='inline-block';
   if(typeof DeviceOrientationEvent==='undefined'){
    status.textContent='相機已啟動｜此裝置不支援方向感測器';
-  }else if(hasOrientation){
-   recenter();
+  }else if(typeof DeviceOrientationEvent.requestPermission==='function'){
+   // Safari cannot silently request first-time motion permission.
+   // Keep the UI free of a PLAY / tracking button; existing recenter handles consent.
+   status.textContent='相機已啟動｜請按「重新定位」授權方向感測器，否則海龜會跟著畫面';
   }else{
-   status.textContent='相機已啟動｜等待方向感測器資料；可按重新定位';
+   trackingGranted=true;
+   if(hasOrientation)recenter();else status.textContent='相機已啟動｜等待方向感測器資料，若未啟動請按重新定位';
   }
  }catch(err){
   status.textContent='相機無法自動啟動：'+err.message+'｜請確認 Safari 相機權限';
