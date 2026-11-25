@@ -95,7 +95,11 @@ const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);sce
 const anchor=new THREE.Group();anchor.position.set(-0.057823,-0.98064,-4.0781);scene.add(anchor);
 const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));anchor.add(ball);
 let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
-let autoRecenterDone=false;
+let autoRecenterDone=false,autoRecenterTimer=null;
+function scheduleAutoRecenter(){
+ if(autoRecenterDone||autoRecenterTimer||!active||!trackingGranted||!hasOrientation)return;
+ autoRecenterTimer=setTimeout(()=>{autoRecenterTimer=null;if(!autoRecenterDone&&active&&trackingGranted&&hasOrientation){recenter();autoRecenterDone=true;}},500);
+}
 const basePosition=new THREE.Vector3(-0.057823,-0.98064,-4.0781),latestSpawnQ=new THREE.Quaternion();let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 const clock=new THREE.Clock();
@@ -109,7 +113,7 @@ function readOrientation(event){
  const angle=screen.orientation?.angle??window.orientation??0;
  screenQ.setFromAxisAngle(zee,-THREE.MathUtils.degToRad(Number(angle)));
  latestQ.copy(deviceQ).multiply(screenQ);hasOrientation=true;
- if(active&&trackingGranted&&!autoRecenterDone){autoRecenterDone=true;recenter();}
+ scheduleAutoRecenter();
 }
 window.addEventListener('deviceorientation',readOrientation,true);
 function recenter(){
@@ -134,6 +138,8 @@ reset.addEventListener('click',async()=>{
   }catch(error){status.textContent='方向追蹤無法啟動：'+error.message;return;}
  }
  recenter();
+ autoRecenterDone=true;
+ if(autoRecenterTimer){clearTimeout(autoRecenterTimer);autoRecenterTimer=null;}
 });
 async function startCameraAutomatically(){
  try{
@@ -149,7 +155,8 @@ async function startCameraAutomatically(){
    status.textContent='相機已啟動｜請按「重新定位」授權方向感測器，否則海龜會跟著畫面';
   }else{
    trackingGranted=true;
-   if(hasOrientation&&!autoRecenterDone){autoRecenterDone=true;recenter();}else status.textContent='相機已啟動｜等待方向感測器資料，若未啟動請按重新定位';
+   scheduleAutoRecenter();
+   if(!hasOrientation)status.textContent='相機已啟動｜等待方向感測器資料，若未啟動請按重新定位';
   }
  }catch(err){
   status.textContent='相機無法自動啟動：'+err.message+'｜請確認 Safari 相機權限';
@@ -203,7 +210,9 @@ function animate(){
  const delta=Math.min(clock.getDelta(),.05);
  if(mixer)mixer.update(delta);
  if(active&&trackingGranted&&hasOrientation&&orientationReady){
-  relativeQ.copy(inverseOriginQ).multiply(latestQ);
+  // Apply the change in device orientation in world coordinates.
+  // The previous inverseOriginQ * latestQ order mixed pitch and yaw axes.
+  relativeQ.copy(latestQ).multiply(inverseOriginQ);
   camera.quaternion.copy(relativeQ);
  }
  if(active&&orientationReady&&modelReady){
