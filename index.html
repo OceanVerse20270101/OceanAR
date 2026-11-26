@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
-<title>OceanAR · 潛水員實境面鏡</title>
+<title>OceanAR · 鯨魚實境面鏡</title>
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#041524;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;user-select:none;-webkit-user-select:none}
 #camera,#scene{position:fixed;inset:0;width:100%;height:100%}
@@ -184,7 +184,7 @@ button:disabled{opacity:.5}
 
   <div class="hero-badge" aria-hidden="true">🌊</div>
   <h1>OceanAR</h1>
-  <p>點擊下方按鈕並允許「動作與方向」及「相機」權限，即可在真實空間中看見海龜悠游。</p>
+  <p>點擊下方按鈕並允許「動作與方向」及「相機」權限，即可在真實空間中看見鯨魚悠游。</p>
 
   <div class="btn-halo-wrap">
     <button id="start-btn" type="button">開始體驗 AR</button>
@@ -350,7 +350,7 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x526a78,2.2));
 const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);scene.add(light);
 
 const anchor=new THREE.Group();
-anchor.position.set(-0.057823,-0.98064,-4.0781);
+anchor.position.set(-20.823,0.000002,-55.167);
 scene.add(anchor);
 
 const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));
@@ -428,7 +428,7 @@ for(let i=0;i<12;i++){
 let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
 let initialRecenterDone=false;
 
-const basePosition=new THREE.Vector3(-0.057823,-0.98064,-4.0781);
+const basePosition=new THREE.Vector3(-20.823,0.000002,-55.167);
 let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 let latestBeta=null,originBeta=null;
@@ -466,7 +466,7 @@ function recenter(){
  fishSchoolGroup.position.copy(basePosition);
  swimTime=0;
  orientationReady=true;
- status.textContent=modelReady?'OceanAR 已啟動｜轉動手機觀察海龜與魚群':'空間已定位｜海龜模型載入中…';
+ status.textContent=modelReady?'OceanAR 已啟動｜轉動手機觀察鯨魚與魚群':'空間已定位｜鯨魚模型載入中…';
 }
 
 // 啟動診斷：在封面直接顯示錯誤，避免被遮罩蓋住
@@ -561,12 +561,12 @@ reset.addEventListener('click',async()=>{
 const draco=new DRACOLoader();
 draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
 const loader=new GLTFLoader();loader.setDRACOLoader(draco);
-const modelURL=new URL('./turtle.glb',window.location.href).href;
+const modelURL=new URL('./whale.glb',window.location.href).href;
 
-async function loadTurtle(){
+async function loadWhale(){
  try{
   const response=await fetch(modelURL+'?v=5');
-  if(!response.ok)throw Error('模型網址 HTTP '+response.status+'，請確認 GitHub 上有 turtle.glb');
+  if(!response.ok)throw Error('模型網址 HTTP '+response.status+'，請確認 GitHub 上有 whale.glb');
   const bytes=await response.arrayBuffer();
   const signature=new TextDecoder().decode(bytes.slice(0,4));
   if(signature!=='glTF')throw Error('下載的不是有效 GLB，檔案開頭：'+signature);
@@ -576,8 +576,17 @@ async function loadTurtle(){
    const bounds=new THREE.Box3().setFromObject(turtle);
    const size=bounds.getSize(new THREE.Vector3());
    const maxDimension=Math.max(size.x,size.y,size.z);
-   if(!Number.isFinite(maxDimension)||maxDimension<=0){status.textContent='海龜模型尺寸異常';return;}
-   turtle.scale.setScalar(0.98/maxDimension);
+   if(!Number.isFinite(maxDimension)||maxDimension<=0){status.textContent='鯨魚模型尺寸異常';return;}
+   turtle.scale.setScalar(0.98/maxDimension * 7.401);
+   // Blender XYZ 歐拉角，採用 Blender Z-up 到 Three.js Y-up 的軸轉換
+   const blenderRotation=new THREE.Euler(
+     THREE.MathUtils.degToRad(-0.51725),
+     THREE.MathUtils.degToRad(-8.2292),
+     THREE.MathUtils.degToRad(134.89),
+     'XYZ'
+   );
+   const axisConversion=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-Math.PI/2);
+   turtle.quaternion.copy(axisConversion).multiply(new THREE.Quaternion().setFromEuler(blenderRotation));
    turtle.updateMatrixWorld(true);
    const centered=new THREE.Box3().setFromObject(turtle);
    const center=centered.getCenter(new THREE.Vector3());
@@ -588,12 +597,12 @@ async function loadTurtle(){
     for(const clip of gltf.animations){mixer.clipAction(clip).setLoop(THREE.LoopRepeat,Infinity).play();}
    }
    modelReady=true;
-   if(active && orientationReady)status.textContent='OceanAR 已啟動｜轉動手機觀察海龜與魚群';
+   if(active && orientationReady)status.textContent='OceanAR 已啟動｜轉動手機觀察鯨魚與魚群';
    draco.dispose();
-  },error=>{console.error('海龜解析失敗',error);status.textContent='海龜解碼失敗：'+(error?.message||String(error));});
- }catch(error){console.error(error);status.textContent='海龜下載失敗：'+error.message;}
+  },error=>{console.error('鯨魚解析失敗',error);status.textContent='鯨魚解碼失敗：'+(error?.message||String(error));});
+ }catch(error){console.error(error);status.textContent='鯨魚下載失敗：'+error.message;}
 }
-loadTurtle();
+loadWhale();
 
 const dirNames=['N','NE','E','SE','S','SW','W','NW'];
 function updateHUDCompass(){
