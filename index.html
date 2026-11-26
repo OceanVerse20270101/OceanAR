@@ -350,7 +350,7 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x526a78,2.2));
 const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);scene.add(light);
 
 const anchor=new THREE.Group();
-anchor.position.set(0,0,-5);
+anchor.position.set(0,0,0);
 scene.add(anchor);
 
 const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));
@@ -358,7 +358,7 @@ anchor.add(ball);
 
 // ================= 純程式打造 3D 伴游小魚群 =================
 const fishSchoolGroup=new THREE.Group();
-fishSchoolGroup.position.set(0,0,-9);
+fishSchoolGroup.position.copy(anchor.position);
 scene.add(fishSchoolGroup);
 
 const bodyGeo=new THREE.SphereGeometry(1,16,12);
@@ -428,7 +428,7 @@ for(let i=0;i<12;i++){
 let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
 let initialRecenterDone=false;
 
-const basePosition=new THREE.Vector3(0,0,-5);
+const basePosition=new THREE.Vector3(0,0,-2);
 let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 let latestBeta=null,originBeta=null;
@@ -463,7 +463,7 @@ function recenter(){
  originBeta=latestBeta;
  camera.quaternion.identity();
  anchor.position.copy(basePosition);
- fishSchoolGroup.position.set(0,0,-9);
+fishSchoolGroup.position.set(0, 0, -3);
  swimTime=0;
  orientationReady=true;
  status.textContent=modelReady?'OceanAR 已啟動｜轉動手機觀察鯨魚與魚群':'空間已定位｜鯨魚模型載入中…';
@@ -577,21 +577,24 @@ async function loadWhale(){
    const size=bounds.getSize(new THREE.Vector3());
    const maxDimension=Math.max(size.x,size.y,size.z);
    if(!Number.isFinite(maxDimension)||maxDimension<=0){status.textContent='鯨魚模型尺寸異常';return;}
-   // GLB 已包含 Blender 到 glTF 的座標轉換，避免再次旋轉 90 度。
-   // 先用模型的實際包圍盒中心歸零，再縮放到約 3 個場景單位。
-   const center=bounds.getCenter(new THREE.Vector3());
-   const centeredGroup=new THREE.Group();
+   turtle.scale.setScalar(0.98/maxDimension * 1.000);
+   // Blender XYZ 歐拉角，採用 Blender Z-up 到 Three.js Y-up 的軸轉換
+   const blenderRotation=new THREE.Euler(
+     THREE.MathUtils.degToRad(0),
+     THREE.MathUtils.degToRad(0),
+     THREE.MathUtils.degToRad(0),
+     'XYZ'
+   );
+   const axisConversion=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-Math.PI/2);
+   turtle.quaternion.copy(axisConversion).multiply(new THREE.Quaternion().setFromEuler(blenderRotation));
+   turtle.updateMatrixWorld(true);
+   const centered=new THREE.Box3().setFromObject(turtle);
+   const center=centered.getCenter(new THREE.Vector3());
    turtle.position.sub(center);
-   centeredGroup.add(turtle);
-   centeredGroup.scale.setScalar(3/maxDimension);
-   anchor.add(centeredGroup);
-   anchor.remove(ball);
-   // 骨架動畫只播放 Swimming，避免與另一段骨架動畫互相覆蓋。
-   // 空體Action 含有大幅位移，暫不播放，以免鯨魚再次游出鏡頭。
-   const swimming=gltf.animations.find(clip=>clip.name==='Swimming');
-   if(swimming){
+   anchor.add(turtle);anchor.remove(ball);
+   if(gltf.animations.length){
     mixer=new THREE.AnimationMixer(turtle);
-    mixer.clipAction(swimming).setLoop(THREE.LoopRepeat,Infinity).play();
+    for(const clip of gltf.animations){mixer.clipAction(clip).setLoop(THREE.LoopRepeat,Infinity).play();}
    }
    modelReady=true;
    if(active && orientationReady)status.textContent='OceanAR 已啟動｜轉動手機觀察鯨魚與魚群';
