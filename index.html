@@ -469,31 +469,53 @@ function recenter(){
  status.textContent=modelReady?'OceanAR 已啟動｜轉動手機觀察海龜與魚群':'空間已定位｜海龜模型載入中…';
 }
 
+// 啟動診斷：在封面直接顯示錯誤，避免被遮罩蓋住
+const startupMessage=document.createElement('div');
+startupMessage.style.cssText='position:relative;z-index:3;margin-top:20px;max-width:90vw;color:#fff;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere';
+startBtn.closest('.btn-halo-wrap').insertAdjacentElement('afterend',startupMessage);
+function showStartupMessage(message){
+ startupMessage.textContent=message;
+ status.textContent=message;
+}
+function withTimeout(promise,ms,label){
+ return new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(new Error(label+'逾時（'+Math.round(ms/1000)+'秒）')),ms);
+  Promise.resolve(promise).then(v=>{clearTimeout(timer);resolve(v)},e=>{clearTimeout(timer);reject(e)});
+ });
+}
+let starting=false;
 startBtn.addEventListener('click',async()=>{
+ if(starting)return;
+ starting=true;
  startBtn.disabled=true;
  startBtn.textContent='正在啟動…';
-
- if(typeof DeviceOrientationEvent!=='undefined'){
-  try{
-   if(typeof DeviceOrientationEvent.requestPermission==='function'){
-    const permission=await DeviceOrientationEvent.requestPermission();
-    if(permission!=='granted')throw new Error('方向感測器權限遭拒');
-   }
-   trackingGranted=true;
-  }catch(error){
-   status.textContent='方向追蹤無法啟動：'+error.message;
-   startBtn.disabled=false;
-   startBtn.textContent='重新嘗試啟動';
-   return;
-  }
- }
-
+ showStartupMessage('正在啟動相機…');
  try{
-  status.textContent='正在請求相機權限…';
-  const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});
+  if(!window.isSecureContext)throw new Error('網頁不是安全連線（需要 HTTPS）');
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error('此瀏覽器無法使用相機 API，請改用 Chrome 或 Safari');
+
+  // iOS 必須在使用者點擊事件中直接要求方向權限；Android 不要求此權限。
+  const needsIOSPermission=typeof DeviceOrientationEvent!=='undefined' &&
+    typeof DeviceOrientationEvent.requestPermission==='function';
+  let orientationPromise=null;
+  if(needsIOSPermission){
+   orientationPromise=DeviceOrientationEvent.requestPermission();
+  }else{
+   trackingGranted=typeof DeviceOrientationEvent!=='undefined';
+  }
+
+  // 先請求相機，不因方向感測器沒有回應而阻止相機啟動。
+  const cameraPromise=navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});
+  // 即使相機等待逾時後才成功，也關閉遲到的串流，避免占用相機。
+  let cameraTimedOut=false;
+  cameraPromise.then(lateStream=>{if(cameraTimedOut)lateStream.getTracks().forEach(t=>t.stop())}).catch(()=>{});
+  let stream;
+  try{stream=await withTimeout(cameraPromise,15000,'相機啟動')}
+  catch(error){cameraTimedOut=true;throw error}
   video.srcObject=stream;
-  await video.play();
-  
+  try{await withTimeout(video.play(),8000,'相機畫面播放')}
+  catch(error){stream.getTracks().forEach(t=>t.stop());video.srcObject=null;throw error}
+
   startOverlay.style.display='none';
   controls.style.display='flex';
   hud.style.display='block';
@@ -501,19 +523,26 @@ startBtn.addEventListener('click',async()=>{
   sunlight.style.display='block';
   active=true;
 
-  if(typeof DeviceOrientationEvent==='undefined'){
-   status.textContent='相機已啟動｜此裝置不支援方向感測器';
+  if(orientationPromise){
+   try{
+    const permission=await withTimeout(orientationPromise,4000,'方向授權');
+    trackingGranted=permission==='granted';
+   }catch(e){trackingGranted=false;console.warn('方向授權未完成',e)}
+  }
+  if(!trackingGranted){
+   status.textContent='相機已啟動｜方向感測器未授權或不支援';
   }else if(hasOrientation){
    initialRecenterDone=true;
    recenter();
   }else{
-   status.textContent='相機已啟動｜請輕輕轉動手機以完成空間定位';
+   status.textContent='相機已啟動｜請輕輕轉動手機以完成定位';
   }
  }catch(err){
-  status.textContent='相機無法啟動：'+err.message+'｜請確認瀏覽器相機權限';
-  startBtn.disabled=false;
+  console.error('OceanAR 啟動失敗',err);
+  showStartupMessage('啟動失敗：'+(err.name||'Error')+'｜'+(err.message||String(err))+'\n請確認瀏覽器相機權限，或使用 Chrome 開啟。');
   startBtn.textContent='重新嘗試啟動';
- }
+  startBtn.disabled=false;
+ }finally{starting=false}
 });
 
 reset.addEventListener('click',async()=>{
