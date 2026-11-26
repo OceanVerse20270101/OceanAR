@@ -350,7 +350,7 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x526a78,2.2));
 const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);scene.add(light);
 
 const anchor=new THREE.Group();
-anchor.position.set(-3.6977,-2.6857,-29);
+anchor.position.set(0,0,0);
 scene.add(anchor);
 
 const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));
@@ -428,7 +428,7 @@ for(let i=0;i<12;i++){
 let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
 let initialRecenterDone=false;
 
-const basePosition=new THREE.Vector3(-3.6977,-2.6857,-29);
+const basePosition=new THREE.Vector3(0,0,0);
 let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 let latestBeta=null,originBeta=null;
