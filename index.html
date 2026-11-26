@@ -350,7 +350,7 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x526a78,2.2));
 const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(2,4,3);scene.add(light);
 
 const anchor=new THREE.Group();
-anchor.position.set(-20.823,0.000002,-55.167);
+anchor.position.set(-3.6977,-2.6857,-29);
 scene.add(anchor);
 
 const ball=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),new THREE.MeshStandardMaterial({color:0x20e49b,roughness:.5}));
@@ -428,7 +428,7 @@ for(let i=0;i<12;i++){
 let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
 let initialRecenterDone=false;
 
-const basePosition=new THREE.Vector3(-20.823,0.000002,-55.167);
+const basePosition=new THREE.Vector3(-3.6977,-2.6857,-29);
 let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 let latestBeta=null,originBeta=null;
@@ -577,12 +577,12 @@ async function loadWhale(){
    const size=bounds.getSize(new THREE.Vector3());
    const maxDimension=Math.max(size.x,size.y,size.z);
    if(!Number.isFinite(maxDimension)||maxDimension<=0){status.textContent='鯨魚模型尺寸異常';return;}
-   turtle.scale.setScalar(0.98/maxDimension * 7.401);
+   turtle.scale.setScalar(0.98/maxDimension * 1.000);
    // Blender XYZ 歐拉角，採用 Blender Z-up 到 Three.js Y-up 的軸轉換
    const blenderRotation=new THREE.Euler(
-     THREE.MathUtils.degToRad(-0.51725),
-     THREE.MathUtils.degToRad(-8.2292),
-     THREE.MathUtils.degToRad(134.89),
+     THREE.MathUtils.degToRad(0),
+     THREE.MathUtils.degToRad(0),
+     THREE.MathUtils.degToRad(0),
      'XYZ'
    );
    const axisConversion=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-Math.PI/2);
