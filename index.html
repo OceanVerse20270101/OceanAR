@@ -644,6 +644,7 @@ async function loadWhale() {
           for (const clip of gltf.animations) {
             const action = mixer.clipAction(clip);
             action.reset();
+            action.timeScale = 0.5;
             action.setLoop(THREE.LoopRepeat, Infinity);
             action.clampWhenFinished = false;
             action.enabled = true;
