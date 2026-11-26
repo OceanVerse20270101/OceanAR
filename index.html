@@ -37,6 +37,9 @@ body.deep #sunlight,body.deep #ocean-filter{display:none!important}
 @keyframes caustic-drift{from{transform:translate(-4%,-2%) rotate(-3deg)}to{transform:translate(4%,3%) rotate(4deg)}}
 
 #scene{pointer-events:none;z-index:2}
+/* 海水色彩覆蓋相機與鯨魚，但不遮蔽操作介面 */
+#underwater-tint{position:fixed;inset:0;z-index:3;pointer-events:none;display:none;background:linear-gradient(180deg,rgba(13,105,155,.23),rgba(7,105,154,.19) 55%,rgba(3,65,124,.29))}
+body.deep #underwater-tint{background:linear-gradient(180deg,rgba(2,35,95,.40),rgba(0,31,87,.48) 60%,rgba(0,13,53,.58))}
 
 /* ================= 潛水員面鏡 HUD 介面 ================= */
 #hud{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
@@ -195,6 +198,7 @@ button:disabled{opacity:.5}
 <div id="ocean-filter" aria-hidden="true"></div>
 <div id="deep-filter" aria-hidden="true"></div>
 <div id="deep-flashlight" aria-hidden="true"></div>
+<div id="underwater-tint" aria-hidden="true"></div>
 <div id="sunlight" aria-hidden="true"><div class="sun-glow"></div><div class="sun-rays"></div><div class="caustics"></div></div>
 
 <!-- 潛水員面鏡 HUD -->
@@ -241,6 +245,7 @@ const startOverlay=document.getElementById('start-overlay');
 const startBtn=document.getElementById('start-btn');
 const coverBubbles=document.getElementById('cover-bubbles');
 const oceanFilter=document.getElementById('ocean-filter');
+const underwaterTint=document.getElementById('underwater-tint');
 const sunlight=document.getElementById('sunlight');
 const deepFilter=document.getElementById('deep-filter');
 const shallowBtn=document.getElementById('shallow-btn');
@@ -520,6 +525,7 @@ startBtn.addEventListener('click',async()=>{
   controls.style.display='flex';
   hud.style.display='block';
   oceanFilter.style.display='block';
+  underwaterTint.style.display='block';
   sunlight.style.display='block';
   active=true;
 
