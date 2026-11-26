@@ -428,7 +428,7 @@ for(let i=0;i<12;i++){
 let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
 let initialRecenterDone=false;
 
-const basePosition=new THREE.Vector3(-1,0,0);
+const basePosition=new THREE.Vector3(-1.5,0,0);
 let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 let latestBeta=null,originBeta=null;
@@ -558,50 +558,122 @@ reset.addEventListener('click',async()=>{
  recenter();
 });
 
-const draco=new DRACOLoader();
+const draco = new DRACOLoader();
 draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
-const loader=new GLTFLoader();loader.setDRACOLoader(draco);
-const modelURL=new URL('./whale.glb',window.location.href).href;
 
-async function loadWhale(){
- try{
-  const response=await fetch(modelURL+'?v=5');
-  if(!response.ok)throw Error('模型網址 HTTP '+response.status+'，請確認 GitHub 上有 whale.glb');
-  const bytes=await response.arrayBuffer();
-  const signature=new TextDecoder().decode(bytes.slice(0,4));
-  if(signature!=='glTF')throw Error('下載的不是有效 GLB，檔案開頭：'+signature);
-  loader.parse(bytes,modelURL.substring(0,modelURL.lastIndexOf('/')+1),gltf=>{
-   const turtle=gltf.scene;
-   turtle.updateMatrixWorld(true);
-   const bounds=new THREE.Box3().setFromObject(turtle);
-   const size=bounds.getSize(new THREE.Vector3());
-   const maxDimension=Math.max(size.x,size.y,size.z);
-   if(!Number.isFinite(maxDimension)||maxDimension<=0){status.textContent='鯨魚模型尺寸異常';return;}
-   turtle.scale.setScalar(0.98/maxDimension * 1.000);
-   // Blender XYZ 歐拉角，採用 Blender Z-up 到 Three.js Y-up 的軸轉換
-   const blenderRotation = new THREE.Euler(
-  THREE.MathUtils.degToRad(90),
-  THREE.MathUtils.degToRad(0),
-  THREE.MathUtils.degToRad(0),
-  'XYZ'
-);
-   const axisConversion=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-Math.PI/2);
-   turtle.quaternion.copy(axisConversion).multiply(new THREE.Quaternion().setFromEuler(blenderRotation));
-   turtle.updateMatrixWorld(true);
-   const centered=new THREE.Box3().setFromObject(turtle);
-   const center=centered.getCenter(new THREE.Vector3());
-   turtle.position.sub(center);
-   anchor.add(turtle);anchor.remove(ball);
-   if(gltf.animations.length){
-    mixer=new THREE.AnimationMixer(turtle);
-    for(const clip of gltf.animations){mixer.clipAction(clip).setLoop(THREE.LoopRepeat,Infinity).play();}
-   }
-   modelReady=true;
-   if(active && orientationReady)status.textContent='OceanAR 已啟動｜轉動手機觀察鯨魚與魚群';
-   draco.dispose();
-  },error=>{console.error('鯨魚解析失敗',error);status.textContent='鯨魚解碼失敗：'+(error?.message||String(error));});
- }catch(error){console.error(error);status.textContent='鯨魚下載失敗：'+error.message;}
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
+
+const modelURL = new URL('./whale.glb', window.location.href).href;
+
+async function loadWhale() {
+  try {
+    console.log('開始載入鯨魚模型...');
+
+    const response = await fetch(modelURL + '?v=5');
+    if (!response.ok) {
+      throw new Error('模型網址 HTTP ' + response.status + '，請確認 GitHub 上有 whale.glb');
+    }
+
+    const bytes = await response.arrayBuffer();
+    const signature = new TextDecoder().decode(bytes.slice(0, 4));
+    if (signature !== 'glTF') {
+      throw new Error('下載的不是有效 GLB，檔案開頭：' + signature);
+    }
+
+    loader.parse(
+      bytes,
+      modelURL.substring(0, modelURL.lastIndexOf('/') + 1),
+      gltf => {
+        console.log('鯨魚模型載入成功！');
+        console.log('GLB 動畫數量：', gltf.animations.length);
+
+        const turtle = gltf.scene;
+        turtle.updateMatrixWorld(true);
+
+        const bounds = new THREE.Box3().setFromObject(turtle);
+        const size = bounds.getSize(new THREE.Vector3());
+        const maxDimension = Math.max(size.x, size.y, size.z);
+
+        if (!Number.isFinite(maxDimension) || maxDimension <= 0) {
+          status.textContent = '鯨魚模型尺寸異常';
+          return;
+        }
+
+        turtle.scale.setScalar(0.98 / maxDimension);
+
+        // 保留原始程式的 Blender / Three.js 座標軸轉換
+        const blenderRotation = new THREE.Euler(
+          THREE.MathUtils.degToRad(90),
+          THREE.MathUtils.degToRad(0),
+          THREE.MathUtils.degToRad(0),
+          'XYZ'
+        );
+
+        const axisConversion = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(1, 0, 0),
+          -Math.PI / 2
+        );
+
+        turtle.quaternion.copy(axisConversion).multiply(
+          new THREE.Quaternion().setFromEuler(blenderRotation)
+        );
+
+        turtle.updateMatrixWorld(true);
+        const centered = new THREE.Box3().setFromObject(turtle);
+        const center = centered.getCenter(new THREE.Vector3());
+        turtle.position.sub(center);
+
+        anchor.add(turtle);
+        anchor.remove(ball);
+
+        // 動畫診斷：列出每段動畫的名稱、長度與軌道數
+        gltf.animations.forEach((clip, index) => {
+          console.log(`動畫 ${index + 1}:`, {
+            name: clip.name,
+            duration: clip.duration,
+            tracks: clip.tracks.length,
+            trackNames: clip.tracks.map(track => track.name)
+          });
+        });
+
+        // 建立動畫播放器，並循環播放 GLB 內所有動畫
+        if (gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(turtle);
+
+          for (const clip of gltf.animations) {
+            const action = mixer.clipAction(clip);
+            action.reset();
+            action.setLoop(THREE.LoopRepeat, Infinity);
+            action.clampWhenFinished = false;
+            action.enabled = true;
+            action.play();
+          }
+
+          console.log('鯨魚動畫播放指令已啟動。');
+        } else {
+          console.warn('這個 whale.glb 沒有包含內建動畫。');
+          status.textContent = '鯨魚模型已載入，但 GLB 沒有內建動畫';
+        }
+
+        modelReady = true;
+        if (active && orientationReady) {
+          status.textContent = 'OceanAR 已啟動｜轉動手機觀察鯨魚與魚群';
+        }
+
+        draco.dispose();
+      },
+      error => {
+        console.error('鯨魚解析失敗：', error);
+        status.textContent = '鯨魚解碼失敗：' + (error?.message || String(error));
+      }
+    );
+  } catch (error) {
+    console.error('鯨魚下載失敗：', error);
+    status.textContent = '鯨魚下載失敗：' + error.message;
+  }
 }
+
 loadWhale();
 
 const dirNames=['N','NE','E','SE','S','SW','W','NW'];
