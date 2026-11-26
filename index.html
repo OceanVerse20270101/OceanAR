@@ -428,7 +428,7 @@ for(let i=0;i<12;i++){
 let mixer=null,active=false,orientationReady=false,hasOrientation=false,latestQ=new THREE.Quaternion(),trackingGranted=false,modelReady=false;
 let initialRecenterDone=false;
 
-const basePosition=new THREE.Vector3(-0.5,0,-2);
+const basePosition=new THREE.Vector3(-2,0,-0.3);
 let swimTime=0;
 const originQ=new THREE.Quaternion(),inverseOriginQ=new THREE.Quaternion(),relativeQ=new THREE.Quaternion();
 let latestBeta=null,originBeta=null;
@@ -580,7 +580,7 @@ async function loadWhale(){
    turtle.scale.setScalar(0.98/maxDimension * 1.000);
    // Blender XYZ 歐拉角，採用 Blender Z-up 到 Three.js Y-up 的軸轉換
    const blenderRotation = new THREE.Euler(
-  THREE.MathUtils.degToRad(0),
+  THREE.MathUtils.degToRad(90),
   THREE.MathUtils.degToRad(0),
   THREE.MathUtils.degToRad(0),
   'XYZ'
